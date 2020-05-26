@@ -1,0 +1,18 @@
+{
+  "name": "remove-submission-service",
+  "version": "0.1.0",
+  "description": "Microservice responsible for removing/cleaning up submissions",
+  "dependencies": {
+    "@lblod/mu-auth-sudo": "^0.2.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lblod/remove-submission-service.git"
+  },
+  "author": "redpencil.io",
+  "license": "MIT"
+}
