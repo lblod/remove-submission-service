@@ -2,21 +2,18 @@ import { sparqlEscapeUri } from 'mu';
 import { updateSudo as update } from '@lblod/mu-auth-sudo';
 import fs from 'fs-extra';
 
-// TODO create helper function to delete files based on a param using the file-service
-export function deleteFile() {
-
-}
+export const FILE_GRAPH = process.env.FILE_GRAPH || 'http://mu.semte.ch/graphs/public';
 
 /**
- * Deletes a ttl file in the triplestore and on disk
+ * Deletes a file in the triplestore and on disk
  */
-export async function deleteTTL(uri) {
+export async function deleteFile(uri) {
   const path = uri.replace('share://', '/share/');
 
   try {
     await fs.unlink(path);
   } catch (e) {
-    console.log(`Failed to delete TTL file <${uri}> on disk: \n ${e}`);
+    console.log(`Failed to delete file <${uri}> on disk: \n ${e}`);
     throw e;
   }
 

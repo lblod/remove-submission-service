@@ -1,5 +1,6 @@
-import {querySudo, updateSudo} from '@lblod/mu-auth-sudo';
-import {deleteTTL} from "./file-helpers";
+import {sparqlEscapeString, sparqlEscapeUri} from 'mu';
+import {querySudo} from '@lblod/mu-auth-sudo';
+import {deleteFile, FILE_GRAPH} from "./file-helpers";
 
 const SENT_STATUS = 'http://lblod.data.gift/concepts/9bd8d86d-bb10-4456-a84e-91e9507c374c';
 
@@ -14,18 +15,24 @@ export async function deleteSubmissionDocument(uuid) {
 
   if (submissionDoc) {
     if (submissionDoc.status !== SENT_STATUS) {
-      // TODO delete all files on the predicate "dct:hasPart"
 
-      // TODO delete all (meta)-files on predicate "dct:source"
+      await deleteLinkedFiles(submissionDoc.URI);
       await deleteLinkedTTL(submissionDoc.URI);
 
-      // TODO delete linked AutoSubmissionTask -> Submission
-
-      // TODO delete the SubmittedDocument
+      if (submissionDoc.taskURI) await deleteSubmissionResource(submissionDoc.taskURI)
+      await deleteSubmissionResource(submissionDoc.submissionURI)
+      await deleteSubmissionResource(submissionDoc.URI)
+      return {URI: submissionDoc.URI}
     }
-    return {status: 409, message: `Could not delete submission-document <${submissionDoc.URI}>, has already been sent`}
+    return {
+      URI: submissionDoc.URI,
+      error: {
+        status: 409,
+        message: `Could not delete submission-document <${submissionDoc.URI}>, has already been sent`
+      }
+    }
   }
-  return {status: 404, message: `Could not find a submission-document for uuid '${uuid}'`}
+  return {error: {status: 404, message: `Could not find a submission-document for uuid '${uuid}'`}}
 }
 
 /*
@@ -38,21 +45,25 @@ async function getSubmissionDocumentById(uuid) {
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX adms: <http://www.w3.org/ns/adms#>
+    PREFIX prov: <http://www.w3.org/ns/prov#>
 
-    SELECT ?submissionDocument ?status
+    SELECT ?URI ?submissionURI ?taskURI ?status
     WHERE {
       GRAPH ?g {
-        ?submissionDocument mu:uuid ${sparqlEscapeString(uuid)} .
-        ?submission dct:subject ?submissionDocument ;
+        ?URI mu:uuid ${sparqlEscapeString(uuid)} .
+        ?submissionURI dct:subject ?URI ;
                     adms:status ?status .
+        OPTIONAL { ?taskURI prov:generated ?submissionURI . }
       }
     }
   `);
 
   if (result.results.bindings.length) {
     return {
-      URI: result.results.bindings[0]['submissionDocument'].value,
-      status: result.results.bindings[0]['status'].value
+      URI: result.results.bindings[0]['URI'].value,
+      submissionURI: result.results.bindings[0]['submissionURI'].value,
+      status: result.results.bindings[0]['status'].value,
+      taskURI: result.results.bindings[0]['taskURI'] ? result.results.bindings[0]['taskURI'].value : null
     };
   } else {
     return null;
@@ -60,16 +71,46 @@ async function getSubmissionDocumentById(uuid) {
 }
 
 // TODO
-async function deleteLinkedTTL(URI) {
-  const additionsFile = await getFileResource(URI, ADDITIONS_FILE_TYPE);
-  const removalsFile = await getFileResource(URI, REMOVALS_FILE_TYPE);
-  const metaFile = await getFileResource(URI, META_FILE_TYPE);
-  const sourceFile = await getFileResource(URI, FORM_DATA_FILE_TYPE);
+async function deleteLinkedFiles(URI) {
+  const files = await getFileResources(URI);
+  if(files) {
+    for (let file of files) {
+      await deleteFile(file);
+    }
+  }
+}
 
-  if (additionsFile) await deleteTTL(additionsFile);
-  if (removalsFile) await deleteTTL(removalsFile);
-  if (metaFile) await deleteTTL(metaFile);
-  if (sourceFile) await deleteTTL(sourceFile);
+// TODO
+async function deleteLinkedTTL(URI) {
+  const additionsFile = await getTTLResource(URI, ADDITIONS_FILE_TYPE);
+  const removalsFile = await getTTLResource(URI, REMOVALS_FILE_TYPE);
+  const metaFile = await getTTLResource(URI, META_FILE_TYPE);
+  const sourceFile = await getTTLResource(URI, FORM_DATA_FILE_TYPE);
+
+  if (additionsFile) await deleteFile(additionsFile);
+  if (removalsFile) await deleteFile(removalsFile);
+  if (metaFile) await deleteFile(metaFile);
+  if (sourceFile) await deleteFile(sourceFile);
+}
+
+async function getFileResources(submissionDocument) {
+  const result = await querySudo(`
+    PREFIX dct: <http://purl.org/dc/terms/>
+
+    SELECT ?file
+    WHERE {
+     GRAPH ?g {
+        ${sparqlEscapeUri(submissionDocument)} dct:hasPart ?file .
+     }
+    }
+  `)
+
+  if (result.results.bindings.length) {
+    return result.results.bindings.map(binding => binding['file'].value);
+  } else {
+    console.log(`Could not find any linked files for submission-document <${submissionDocument}>`);
+    return null;
+  }
 }
 
 /**
@@ -79,7 +120,7 @@ async function deleteLinkedTTL(URI) {
  * @param {string} fileType URI of the type of the related file
  * @return {string} File full name (path, name and extention)
  */
-async function getFileResource(submissionDocument, fileType) {
+async function getTTLResource(submissionDocument, fileType) {
   const result = await querySudo(`
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     PREFIX dct: <http://purl.org/dc/terms/>
@@ -102,4 +143,24 @@ async function getFileResource(submissionDocument, fileType) {
     console.log(`Part of type ${fileType} for submission document ${submissionDocument} not found`);
     return null;
   }
+}
+
+/**
+ * Delete submission resource
+ *
+ * @param {string} URI of the resource to delete the related files for
+ */
+async function deleteSubmissionResource(URI) {
+  const result = await querySudo(`
+    DELETE {
+      GRAPH ?g {
+        ${sparqlEscapeUri(URI)} ?p ?o .
+      }
+    }
+    WHERE {
+      GRAPH ?g {
+        ${sparqlEscapeUri(URI)} ?p ?o .
+      }
+    }
+  `);
 }
