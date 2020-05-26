@@ -16,7 +16,7 @@ app.delete('/submission-documents/:uuid', async function (req, res, next) {
     }
     return res.status(200).send({message: `successfully deleted submission-document <${URI}>`})
   } catch (e) {
-    console.log(`Something went wrong while deleting submission-document with uuid '${uuid}'`);
+    console.log(`Something unexpected went wrong while deleting submission-document with uuid '${uuid}'`);
     console.error(e);
     return next(e);
   }
