@@ -20,7 +20,10 @@ export async function deleteSubmissionDocument(uuid) {
   if (result) {
     const {submissionDocumentURI, submissionURI, formDataURI, taskURI, status} = result;
     if (status !== SENT_STATUS) {
-      // TODO if task, delete harvested
+
+      // if not a auto-submission, nothing was harvested
+      if(taskURI) await deleteHarvestedFiles(submissionURI);
+
       await deleteUploadedFiles(formDataURI);
       await deleteLinkedTTLFiles(submissionDocumentURI);
 
@@ -84,6 +87,15 @@ async function getSubmissionResourcesById(uuid) {
   }
 }
 
+async function deleteHarvestedFiles(uri){
+  const files = await getFileResources(uri);
+  for (let file of files) {
+    await deleteFile(file.parent);
+    await deleteFile(file.location);
+    await deleteResource(file.file);
+  }
+}
+
 /**
  * Deletes all the linked files for the given resource.
  *
@@ -120,15 +132,15 @@ async function deleteLinkedTTLFiles(uri) {
  * @param uri of the resource.
  */
 async function getFileResources(uri) {
-  // TODO this does not work, for some reason after opening a form in the front-end this link is removed in the db
   const result = await querySudo(`
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
 
-    SELECT ?file ?location
+    SELECT ?file ?location ?parent
     WHERE {
         ${sparqlEscapeUri(uri)} dct:hasPart ?file .
         ?location nie:dataSource ?file .
+        OPTIONAL {?parent nie:dataSource ?location .}
     }
   `)
 
