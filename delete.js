@@ -16,12 +16,13 @@ export async function deleteSubmissionDocument(uuid) {
   if (submissionDoc) {
     if (submissionDoc.status !== SENT_STATUS) {
 
-      await deleteLinkedFiles(submissionDoc.URI);
+      await deleteLinkedFiles(submissionDoc);
       await deleteLinkedTTL(submissionDoc.URI);
 
-      if (submissionDoc.taskURI) await deleteSubmissionResource(submissionDoc.taskURI)
-      await deleteSubmissionResource(submissionDoc.submissionURI)
-      await deleteSubmissionResource(submissionDoc.URI)
+      if (submissionDoc.taskURI) await deleteSubmissionResource(submissionDoc.taskURI);
+      await deleteSubmissionResource(submissionDoc.formDataURI);
+      await deleteSubmissionResource(submissionDoc.submissionURI);
+      await deleteSubmissionResource(submissionDoc.URI);
       return {URI: submissionDoc.URI}
     }
     return {
@@ -47,12 +48,13 @@ async function getSubmissionDocumentById(uuid) {
     PREFIX adms: <http://www.w3.org/ns/adms#>
     PREFIX prov: <http://www.w3.org/ns/prov#>
 
-    SELECT ?URI ?submissionURI ?taskURI ?status
+    SELECT ?URI ?submissionURI ?status ?formDataURI ?taskURI
     WHERE {
       GRAPH ?g {
         ?URI mu:uuid ${sparqlEscapeString(uuid)} .
         ?submissionURI dct:subject ?URI ;
-                    adms:status ?status .
+                    adms:status ?status ;
+                    prov:generated ?formDataURI .
         OPTIONAL { ?taskURI prov:generated ?submissionURI . }
       }
     }
@@ -63,6 +65,7 @@ async function getSubmissionDocumentById(uuid) {
       URI: result.results.bindings[0]['URI'].value,
       submissionURI: result.results.bindings[0]['submissionURI'].value,
       status: result.results.bindings[0]['status'].value,
+      formDataURI: result.results.bindings[0]['formDataURI'].value,
       taskURI: result.results.bindings[0]['taskURI'] ? result.results.bindings[0]['taskURI'].value : null
     };
   } else {
@@ -71,12 +74,10 @@ async function getSubmissionDocumentById(uuid) {
 }
 
 // TODO
-async function deleteLinkedFiles(URI) {
-  const files = await getFileResources(URI);
-  if(files) {
-    for (let file of files) {
-      await deleteFile(file);
-    }
+async function deleteLinkedFiles(submissionDoc) {
+  const files = await getFileResources(submissionDoc.URI);
+  for (let file of files) {
+    await deleteFile(file);
   }
 }
 
@@ -93,14 +94,14 @@ async function deleteLinkedTTL(URI) {
   if (sourceFile) await deleteFile(sourceFile);
 }
 
-async function getFileResources(submissionDocument) {
+async function getFileResources(URI) {
   const result = await querySudo(`
     PREFIX dct: <http://purl.org/dc/terms/>
 
     SELECT ?file
     WHERE {
      GRAPH ?g {
-        ${sparqlEscapeUri(submissionDocument)} dct:hasPart ?file .
+        ${sparqlEscapeUri(URI)} dct:hasPart ?file .
      }
     }
   `)
@@ -108,8 +109,8 @@ async function getFileResources(submissionDocument) {
   if (result.results.bindings.length) {
     return result.results.bindings.map(binding => binding['file'].value);
   } else {
-    console.log(`Could not find any linked files for submission-document <${submissionDocument}>`);
-    return null;
+    console.log(`Could not find any linked files for submission-document <${URI}>`);
+    return [];
   }
 }
 
