@@ -15,25 +15,28 @@ const META_FILE_TYPE = 'http://data.lblod.gift/concepts/meta-file-type';
  * @param uuid - submission-document to be deleted
  */
 export async function deleteSubmissionDocument(uuid) {
-  const submissionDoc = await getSubmissionDocumentById(uuid);
+  const result = await getSubmissionResourcesById(uuid);
 
-  if (submissionDoc) {
-    if (submissionDoc.status !== SENT_STATUS) {
+  if (result) {
+    const {submissionDocumentURI, submissionURI, formDataURI, taskURI, status} = result;
+    if (status !== SENT_STATUS) {
+      // TODO if task, delete harvested
+      await deleteUploadedFiles(formDataURI);
+      await deleteLinkedTTLFiles(submissionDocumentURI);
 
-      await deleteLinkedFiles(submissionDoc);
-      await deleteLinkedTTL(submissionDoc.URI);
+      // if not a auto-submission, no task was created
+      if (taskURI) await deleteResource(taskURI);
 
-      if (submissionDoc.taskURI) await deleteSubmissionResource(submissionDoc.taskURI);
-      await deleteSubmissionResource(submissionDoc.formDataURI);
-      await deleteSubmissionResource(submissionDoc.submissionURI);
-      await deleteSubmissionResource(submissionDoc.URI);
-      return {URI: submissionDoc.URI}
+      await deleteResource(formDataURI);
+      await deleteResource(submissionURI);
+      await deleteResource(submissionDocumentURI);
+      return {message: `successfully deleted submission-document <${submissionDocumentURI}>.`};
     }
     return {
-      URI: submissionDoc.URI,
+      uri: submissionDocumentURI,
       error: {
         status: 409,
-        message: `Could not delete submission-document <${submissionDoc.URI}>, has already been sent`
+        message: `Could not delete submission-document <${submissionDocumentURI}>, has already been sent`
       }
     }
   }
@@ -45,22 +48,22 @@ export async function deleteSubmissionDocument(uuid) {
  */
 
 /**
- * Retrieves submission-documents details/properties based on the given uuid.
+ * Retrieves all the submission resources (URI's) that should be processed for deletion.
  *
- * @param uuid submission-document to retrieve
+ * @param uuid of a submission-document to be deleted
  */
-async function getSubmissionDocumentById(uuid) {
+async function getSubmissionResourcesById(uuid) {
   const result = await querySudo(`
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX adms: <http://www.w3.org/ns/adms#>
     PREFIX prov: <http://www.w3.org/ns/prov#>
 
-    SELECT ?URI ?submissionURI ?status ?formDataURI ?taskURI
+    SELECT ?submissionDocumentURI ?submissionURI ?formDataURI ?taskURI ?status
     WHERE {
       GRAPH ?g {
-        ?URI mu:uuid ${sparqlEscapeString(uuid)} .
-        ?submissionURI dct:subject ?URI ;
+        ?submissionDocumentURI mu:uuid ${sparqlEscapeString(uuid)} .
+        ?submissionURI dct:subject ?submissionDocumentURI ;
                     adms:status ?status ;
                     prov:generated ?formDataURI .
         OPTIONAL { ?taskURI prov:generated ?submissionURI . }
@@ -70,10 +73,10 @@ async function getSubmissionDocumentById(uuid) {
 
   if (result.results.bindings.length) {
     return {
-      URI: result.results.bindings[0]['URI'].value,
+      submissionDocumentURI: result.results.bindings[0]['submissionDocumentURI'].value,
       submissionURI: result.results.bindings[0]['submissionURI'].value,
-      status: result.results.bindings[0]['status'].value,
       formDataURI: result.results.bindings[0]['formDataURI'].value,
+      status: result.results.bindings[0]['status'].value,
       taskURI: result.results.bindings[0]['taskURI'] ? result.results.bindings[0]['taskURI'].value : null
     };
   } else {
@@ -82,28 +85,28 @@ async function getSubmissionDocumentById(uuid) {
 }
 
 /**
- * Deletes all the linked files for the given submission-document.
+ * Deletes all the linked files for the given resource.
  *
- * @param submissionDoc submission-document to delete the linked files for
+ * @param uri of the resource to delete the linked files for
  */
-async function deleteLinkedFiles(submissionDoc) {
-  // TODO does not seem correct
-  const files = await getFileResources(submissionDoc.URI);
+async function deleteUploadedFiles(uri) {
+  const files = await getFileResources(uri);
   for (let file of files) {
-    await deleteFile(file);
+    await deleteFile(file.location);
+    await deleteResource(file.file);
   }
 }
 
 /**
  * Deletes all the linked ttl files for the given URI (submission-document).
  *
- * @param URI resource (submission-document) to delete the linked ttl files for
+ * @param uri resource (submission-document) to delete the linked ttl files for
  */
-async function deleteLinkedTTL(URI) {
-  const additionsFile = await getTTLResource(URI, ADDITIONS_FILE_TYPE);
-  const removalsFile = await getTTLResource(URI, REMOVALS_FILE_TYPE);
-  const metaFile = await getTTLResource(URI, META_FILE_TYPE);
-  const sourceFile = await getTTLResource(URI, FORM_DATA_FILE_TYPE);
+async function deleteLinkedTTLFiles(uri) {
+  const additionsFile = await getTTLResource(uri, ADDITIONS_FILE_TYPE);
+  const removalsFile = await getTTLResource(uri, REMOVALS_FILE_TYPE);
+  const metaFile = await getTTLResource(uri, META_FILE_TYPE);
+  const sourceFile = await getTTLResource(uri, FORM_DATA_FILE_TYPE);
 
   if (additionsFile) await deleteFile(additionsFile);
   if (removalsFile) await deleteFile(removalsFile);
@@ -114,24 +117,30 @@ async function deleteLinkedTTL(URI) {
 /**
  * Retrieves all the file resources linked to the given resource.
  *
- * @param URI of the resource.
+ * @param uri of the resource.
  */
-async function getFileResources(URI) {
+async function getFileResources(uri) {
+  // TODO this does not work, for some reason after opening a form in the front-end this link is removed in the db
   const result = await querySudo(`
     PREFIX dct: <http://purl.org/dc/terms/>
+    PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
 
-    SELECT ?file
+    SELECT ?file ?location
     WHERE {
-     GRAPH ?g {
-        ${sparqlEscapeUri(URI)} dct:hasPart ?file .
-     }
+        ${sparqlEscapeUri(uri)} dct:hasPart ?file .
+        ?location nie:dataSource ?file .
     }
   `)
 
   if (result.results.bindings.length) {
-    return result.results.bindings.map(binding => binding['file'].value);
+    return result.results.bindings.map(binding => {
+      return {
+        file: binding['file'].value,
+        location: binding['location'].value
+      }
+    });
   } else {
-    console.log(`Could not find any linked files for submission-document <${URI}>`);
+    console.log(`Could not find any linked files for submission-document <${uri}>`);
     return [];
   }
 }
@@ -172,7 +181,7 @@ async function getTTLResource(submissionDocument, fileType) {
  *
  * @param {string} URI of the resource to delete the related files for
  */
-async function deleteSubmissionResource(URI) {
+async function deleteResource(URI) {
   const result = await querySudo(`
     DELETE {
       GRAPH ?g {
