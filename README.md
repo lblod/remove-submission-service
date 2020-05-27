@@ -1,4 +1,4 @@
-# remove-submission-service
+# clean-up-submission-service
 
 Microservice responsible for removing/cleaning-up submissions
 
