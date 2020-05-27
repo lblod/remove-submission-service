@@ -1,5 +1,5 @@
 {
-  "name": "remove-submission-service",
+  "name": "clean-up-submission-service",
   "version": "0.1.0",
   "description": "Microservice responsible for removing/cleaning-up submissions",
   "dependencies": {

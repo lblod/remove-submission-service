@@ -3,7 +3,7 @@ import {deleteSubmissionDocument} from "./delete";
 
 
 app.get('/', function (req, res) {
-  res.send('Hello remove-submission-service');
+  res.send('Hello clean-up-submission-service');
 });
 
 app.delete('/submission-documents/:uuid', async function (req, res, next) {
