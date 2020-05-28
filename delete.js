@@ -88,7 +88,7 @@ async function getSubmissionResourcesById(uuid) {
 }
 
 async function deleteHarvestedFiles(uri){
-  const files = await getFileResources(uri);
+  const files = await getHarvestedFiles(uri);
   for (let file of files) {
     await deleteFile(file.parent);
     await deleteFile(file.location);
@@ -102,7 +102,7 @@ async function deleteHarvestedFiles(uri){
  * @param uri of the resource to delete the linked files for
  */
 async function deleteUploadedFiles(uri) {
-  const files = await getFileResources(uri);
+  const files = await getUploadedFiles(uri);
   for (let file of files) {
     await deleteFile(file.location);
     await deleteResource(file.file);
@@ -127,11 +127,11 @@ async function deleteLinkedTTLFiles(uri) {
 }
 
 /**
- * Retrieves all the file resources linked to the given resource.
+ * Retrieves all the uploaded files linked to the given resource (form-data).
  *
  * @param uri of the resource.
  */
-async function getFileResources(uri) {
+async function getUploadedFiles(uri) {
   const result = await querySudo(`
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
@@ -152,7 +152,39 @@ async function getFileResources(uri) {
       }
     });
   } else {
-    console.log(`Could not find any linked files for submission-document <${uri}>`);
+    console.log(`Could not find any uploaded files for resource <${uri}>`);
+    return [];
+  }
+}
+
+/**
+ * Retrieves all the uploaded files linked to the given resource (submission).
+ *
+ * @param uri of the resource.
+ */
+async function getHarvestedFiles(uri) {
+  const result = await querySudo(`
+    PREFIX dct: <http://purl.org/dc/terms/>
+    PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
+
+    SELECT ?file ?location ?parent
+    WHERE {
+        ${sparqlEscapeUri(uri)} nie:hasPart ?file .
+        ?location nie:dataSource ?file .
+        ?parent nie:dataSource ?location .
+    }
+  `)
+
+  if (result.results.bindings.length) {
+    return result.results.bindings.map(binding => {
+      return {
+        file: binding['file'].value,
+        location: binding['location'].value,
+        parent: binding['parent'].value
+      }
+    });
+  } else {
+    console.log(`Could not find any harvested files for resource <${uri}>`);
     return [];
   }
 }
