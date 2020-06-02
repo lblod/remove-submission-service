@@ -48,84 +48,9 @@ export async function deleteSubmission(uuid) {
   return {error: {status: 404, message: `Could not find a submission for uuid '${uuid}'`}};
 }
 
-
-/**
- * Delete a submission-documents resources and properties.
- *
- * @param uuid - submission-document to be deleted
- */
-export async function deleteSubmissionDocument(uuid) {
-  const result = await getSubmissionResourcesById(uuid);
-
-  if (result) {
-    const {submissionDocumentURI, submissionURI, formDataURI, taskURI, status} = result;
-    if (status !== SENT_STATUS) {
-
-      // if not a auto-submission, nothing was harvested
-      if(taskURI) await deleteHarvestedFiles(submissionURI);
-
-      await deleteUploadedFiles(formDataURI);
-      await deleteLinkedTTLFiles(submissionDocumentURI);
-
-      // if not a auto-submission, no task was created
-      if (taskURI) await deleteResource(taskURI);
-
-      await deleteResource(formDataURI);
-      await deleteResource(submissionURI);
-      await deleteResource(submissionDocumentURI);
-      return {message: `successfully deleted submission-document <${submissionDocumentURI}>.`};
-    }
-    return {
-      uri: submissionDocumentURI,
-      error: {
-        status: 409,
-        message: `Could not delete submission-document <${submissionDocumentURI}>, has already been sent`
-      }
-    }
-  }
-  return {error: {status: 404, message: `Could not find a submission-document for uuid '${uuid}'`}}
-}
-
 /*
  * Private
  */
-
-/**
- * Retrieves all the submission resources (URI's) that should be processed for deletion.
- *
- * @param uuid of a submission-document to be deleted
- */
-async function getSubmissionResourcesById(uuid) {
-  const result = await querySudo(`
-    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
-    PREFIX dct: <http://purl.org/dc/terms/>
-    PREFIX adms: <http://www.w3.org/ns/adms#>
-    PREFIX prov: <http://www.w3.org/ns/prov#>
-
-    SELECT ?submissionDocumentURI ?submissionURI ?formDataURI ?taskURI ?status
-    WHERE {
-      GRAPH ?g {
-        ?submissionDocumentURI mu:uuid ${sparqlEscapeString(uuid)} .
-        ?submissionURI dct:subject ?submissionDocumentURI ;
-                    adms:status ?status ;
-                    prov:generated ?formDataURI .
-        OPTIONAL { ?taskURI prov:generated ?submissionURI . }
-      }
-    }
-  `);
-
-  if (result.results.bindings.length) {
-    return {
-      submissionDocumentURI: result.results.bindings[0]['submissionDocumentURI'].value,
-      submissionURI: result.results.bindings[0]['submissionURI'].value,
-      formDataURI: result.results.bindings[0]['formDataURI'].value,
-      status: result.results.bindings[0]['status'].value,
-      taskURI: result.results.bindings[0]['taskURI'] ? result.results.bindings[0]['taskURI'].value : null
-    };
-  } else {
-    return null;
-  }
-}
 
 async function deleteHarvestedFiles(uri){
   const files = await getHarvestedFiles(uri);
