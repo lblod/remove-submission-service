@@ -10,6 +10,46 @@ const REMOVALS_FILE_TYPE = 'http://data.lblod.gift/concepts/removals-file-type';
 const META_FILE_TYPE = 'http://data.lblod.gift/concepts/meta-file-type';
 
 /**
+ * Delete a submission resources and properties. Deletes everything it encounters
+ *
+ * @param uuid - submission-document to be deleted
+ */
+export async function deleteSubmission(uuid) {
+  const result = await getSubmissionById(uuid);
+
+  if (result) {
+
+    const {submissionDocumentURI, submissionURI, formDataURI, taskURI, status} = result;
+    if (status !== SENT_STATUS) {
+
+      // if not a auto-submission, nothing was harvested
+      if(taskURI) await deleteHarvestedFiles(submissionURI);
+
+      if(formDataURI) await deleteUploadedFiles(formDataURI);
+      if(submissionDocumentURI) await deleteLinkedTTLFiles(submissionDocumentURI);
+
+      // if not a auto-submission, no task was created
+      if (taskURI) await deleteResource(taskURI);
+
+      if(formDataURI) await deleteResource(formDataURI);
+      if(submissionDocumentURI) await deleteResource(submissionDocumentURI);
+
+      await deleteResource(submissionURI);
+      return {message: `successfully deleted submission <${submissionURI}>.`};
+    }
+    return {
+      uri: submissionDocumentURI,
+      error: {
+        status: 409,
+        message: `Could not delete submission <${submissionURI}>, has already been sent`
+      }
+    };
+  }
+  return {error: {status: 404, message: `Could not find a submission for uuid '${uuid}'`}};
+}
+
+
+/**
  * Delete a submission-documents resources and properties.
  *
  * @param uuid - submission-document to be deleted
@@ -238,4 +278,57 @@ async function deleteResource(URI) {
       }
     }
   `);
+}
+
+async function getSubmissionById(submissionId){
+  const q = `
+    PREFIX meb: <http://rdf.myexperiment.org/ontologies/base/>
+    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+    PREFIX prov: <http://www.w3.org/ns/prov#>
+    PREFIX melding: <http://lblod.data.gift/vocabularies/automatische-melding/>
+    PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
+    PREFIX nfo: <http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#>
+    PREFIX ext: <http://mu.semte.ch/vocabularies/ext/>
+    PREFIX dct: <http://purl.org/dc/terms/>
+    PREFIX adms: <http://www.w3.org/ns/adms#>
+
+    SELECT ?submission ?formData ?submissionTask ?submissionDocument ?status WHERE {
+
+      GRAPH ?g {
+       ?submission a meb:Submission;
+          mu:uuid ${sparqlEscapeString(submissionId)};
+          adms:status ?status.
+
+       OPTIONAL {
+         ?submission prov:generated ?formData.
+         ?formData a melding:FormData.
+       }
+
+       OPTIONAL {
+         ?submissionTask a melding:AutomaticSubmissionTask.
+         ?submissionTask prov:generated ?submission.
+       }
+
+       OPTIONAL {
+         ?submission dct:subject ?submissionDocument.
+         ?submissionDocument a ext:SubmissionDocument.
+       }
+      }
+    }
+  `;
+
+  const result = await querySudo(q);
+
+  if (result.results.bindings.length) {
+    return {
+      submissionDocumentURI: (result.results.bindings[0]['submissionDocument'] || {}).value,
+      submissionURI: (result.results.bindings[0]['submission'] || {}).value,
+      formDataURI: (result.results.bindings[0]['formData'] || {}).value,
+      status: (result.results.bindings[0]['status'] || {}).value,
+      taskURI: (result.results.bindings[0]['submissionTask'] || {}).value
+    };
+  }
+  else {
+    return null;
+  }
 }
