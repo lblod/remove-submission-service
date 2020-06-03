@@ -23,14 +23,14 @@ The volume mounted in /share must contain the cached downloads of the published 
    
 ## REST API
 
-### DELETE /submission-documents/:uuid
+### DELETE /submissions/:uuid
 
-Deletes the given submission-document.
+Deletes/cleans-up the given submission.
 
-Return 200 OK when the submission-document was deleted.
+* `200 OK` when the submission-document was deleted.
 
-Returns 409 CONFLICT when the submission-document could not be removed.
+* `409 CONFLICT` when the submission-document could not be removed.
 
-Return 404 NOT FOUND when the submission-document could not be found.
+* `404 NOT FOUND` when the submission-document could not be found.
 
-Returns 500 INTERNAL SERVER ERROR when something unexpected happened while processing the submission-document.
+* `500 INTERNAL SERVER ERROR` when something unexpected happened while processing the submission-document.
