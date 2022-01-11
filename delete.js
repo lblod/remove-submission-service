@@ -101,7 +101,7 @@ async function getUploadedFiles(uri) {
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
 
-    SELECT ?file ?location ?parent
+    SELECT DISTINCT ?file ?location ?parent
     WHERE {
         ${sparqlEscapeUri(uri)} dct:hasPart ?file .
         ?location nie:dataSource ?file .
@@ -132,7 +132,7 @@ async function getHarvestedFiles(uri) {
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
 
-    SELECT ?file ?location ?parent
+    SELECT DISTINCT ?file ?location ?parent
     WHERE {
         ${sparqlEscapeUri(uri)} nie:hasPart ?file .
         ?location nie:dataSource ?file .
@@ -166,7 +166,7 @@ async function getTTLResource(submissionDocument, fileType) {
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
 
-    SELECT ?file
+    SELECT DISTINCT ?file
     WHERE {
       GRAPH ?g {
         ${sparqlEscapeUri(submissionDocument)} dct:source ?file .
@@ -217,7 +217,7 @@ async function getSubmissionById(submissionId){
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX adms: <http://www.w3.org/ns/adms#>
 
-    SELECT ?submission ?formData ?submissionTask ?submissionDocument ?status WHERE {
+    SELECT DISTINCT ?submission ?formData ?submissionTask ?submissionDocument ?status WHERE {
 
       GRAPH ?g {
        ?submission a meb:Submission;
