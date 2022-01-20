@@ -57,6 +57,7 @@ async function deleteHarvestedFiles(uri){
   for (let file of files) {
     await deleteFile(file.parent);
     await deleteFile(file.location);
+    await deleteResource(file.location);
     await deleteResource(file.file);
   }
 }
@@ -71,6 +72,7 @@ async function deleteUploadedFiles(uri) {
   for (let file of files) {
     await deleteFile(file.location);
     await deleteResource(file.file);
+    await deleteResource(file.location);
   }
 }
 
