@@ -220,8 +220,6 @@ async function getSubmissionById(submissionId){
     PREFIX adms: <http://www.w3.org/ns/adms#>
 
     SELECT DISTINCT ?submission ?formData ?submissionTask ?submissionDocument ?status WHERE {
-
-      GRAPH ?g {
        ?submission a meb:Submission;
           mu:uuid ${sparqlEscapeString(submissionId)};
           adms:status ?status.
@@ -240,7 +238,6 @@ async function getSubmissionById(submissionId){
          ?submission dct:subject ?submissionDocument.
          ?submissionDocument a ext:SubmissionDocument.
        }
-      }
     }
   `;
 
