@@ -1,8 +1,10 @@
 import { sparqlEscapeUri } from 'mu';
 import { updateSudo as update } from '@lblod/mu-auth-sudo';
-import fs from 'fs-extra';
+import fs from 'fs/promises';
+import * as env from 'env-var';
 
-export const FILE_GRAPH = process.env.FILE_GRAPH || 'http://mu.semte.ch/graphs/public';
+export const FILE_GRAPH =
+  process.env.FILE_GRAPH || 'http://mu.semte.ch/graphs/public';
 
 /**
  * Deletes a file in the triplestore and on disk
@@ -32,9 +34,10 @@ export async function deleteFile(uri) {
         }
       }
 `);
-
   } catch (e) {
-    console.log(`Failed to delete TTL resource <${uri}> in triplestore: \n ${e}`);
+    console.log(
+      `Failed to delete TTL resource <${uri}> in triplestore: \n ${e}`,
+    );
     throw e;
   }
 }

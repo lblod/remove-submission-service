@@ -1,11 +1,14 @@
-import {sparqlEscapeString, sparqlEscapeUri} from 'mu';
-import {querySudo} from '@lblod/mu-auth-sudo';
-import {deleteFile, FILE_GRAPH} from "./file-helpers";
+import { sparqlEscapeString, sparqlEscapeUri } from 'mu';
+import { querySudo } from '@lblod/mu-auth-sudo';
+import { deleteFile, FILE_GRAPH } from './file-helpers';
 
-const SENT_STATUS = 'http://lblod.data.gift/concepts/9bd8d86d-bb10-4456-a84e-91e9507c374c';
+const SENT_STATUS =
+  'http://lblod.data.gift/concepts/9bd8d86d-bb10-4456-a84e-91e9507c374c';
 
-const FORM_DATA_FILE_TYPE = 'http://data.lblod.gift/concepts/form-data-file-type';
-const ADDITIONS_FILE_TYPE = 'http://data.lblod.gift/concepts/additions-file-type';
+const FORM_DATA_FILE_TYPE =
+  'http://data.lblod.gift/concepts/form-data-file-type';
+const ADDITIONS_FILE_TYPE =
+  'http://data.lblod.gift/concepts/additions-file-type';
 const REMOVALS_FILE_TYPE = 'http://data.lblod.gift/concepts/removals-file-type';
 const META_FILE_TYPE = 'http://data.lblod.gift/concepts/meta-file-type';
 
@@ -18,41 +21,51 @@ export async function deleteSubmission(uuid) {
   const result = await getSubmissionById(uuid);
 
   if (result) {
-
-    const {submissionDocumentURI, submissionURI, formDataURI, taskURI, status} = result;
+    const {
+      submissionDocumentURI,
+      submissionURI,
+      formDataURI,
+      taskURI,
+      status,
+    } = result;
     if (status !== SENT_STATUS) {
-
       // if not a auto-submission, nothing was harvested
-      if(taskURI) await deleteHarvestedFiles(submissionURI);
+      if (taskURI) await deleteHarvestedFiles(submissionURI);
 
-      if(formDataURI) await deleteUploadedFiles(formDataURI);
-      if(submissionDocumentURI) await deleteLinkedTTLFiles(submissionDocumentURI);
+      if (formDataURI) await deleteUploadedFiles(formDataURI);
+      if (submissionDocumentURI)
+        await deleteLinkedTTLFiles(submissionDocumentURI);
 
       // if not a auto-submission, no task was created
       if (taskURI) await deleteResource(taskURI);
 
-      if(formDataURI) await deleteResource(formDataURI);
-      if(submissionDocumentURI) await deleteResource(submissionDocumentURI);
+      if (formDataURI) await deleteResource(formDataURI);
+      if (submissionDocumentURI) await deleteResource(submissionDocumentURI);
 
       await deleteResource(submissionURI);
-      return {message: `successfully deleted submission <${submissionURI}>.`};
+      return { message: `successfully deleted submission <${submissionURI}>.` };
     }
     return {
       uri: submissionDocumentURI,
       error: {
         status: 409,
-        message: `Could not delete submission <${submissionURI}>, has already been sent`
-      }
+        message: `Could not delete submission <${submissionURI}>, has already been sent`,
+      },
     };
   }
-  return {error: {status: 404, message: `Could not find a submission for uuid '${uuid}'`}};
+  return {
+    error: {
+      status: 404,
+      message: `Could not find a submission for uuid '${uuid}'`,
+    },
+  };
 }
 
 /*
  * Private
  */
 
-async function deleteHarvestedFiles(uri){
+async function deleteHarvestedFiles(uri) {
   const files = await getHarvestedFiles(uri);
   for (let file of files) {
     await deleteFile(file.parent);
@@ -109,14 +122,14 @@ async function getUploadedFiles(uri) {
         ?location nie:dataSource ?file .
         OPTIONAL {?parent nie:dataSource ?location .}
     }
-  `)
+  `);
 
   if (result.results.bindings.length) {
-    return result.results.bindings.map(binding => {
+    return result.results.bindings.map((binding) => {
       return {
         file: binding['file'].value,
-        location: binding['location'].value
-      }
+        location: binding['location'].value,
+      };
     });
   } else {
     console.log(`Could not find any uploaded files for resource <${uri}>`);
@@ -140,15 +153,15 @@ async function getHarvestedFiles(uri) {
         ?location nie:dataSource ?file .
         ?parent nie:dataSource ?location .
     }
-  `)
+  `);
 
   if (result.results.bindings.length) {
-    return result.results.bindings.map(binding => {
+    return result.results.bindings.map((binding) => {
       return {
         file: binding['file'].value,
         location: binding['location'].value,
-        parent: binding['parent'].value
-      }
+        parent: binding['parent'].value,
+      };
     });
   } else {
     console.log(`Could not find any harvested files for resource <${uri}>`);
@@ -182,7 +195,9 @@ async function getTTLResource(submissionDocument, fileType) {
   if (result.results.bindings.length) {
     return result.results.bindings[0]['file'].value;
   } else {
-    console.log(`Part of type ${fileType} for submission document ${submissionDocument} not found`);
+    console.log(
+      `Part of type ${fileType} for submission document ${submissionDocument} not found`,
+    );
     return null;
   }
 }
@@ -193,7 +208,7 @@ async function getTTLResource(submissionDocument, fileType) {
  * @param {string} URI of the resource to delete the related files for
  */
 async function deleteResource(URI) {
-  const result = await querySudo(`
+  return querySudo(`
     DELETE {
       GRAPH ?g {
         ${sparqlEscapeUri(URI)} ?p ?o .
@@ -207,7 +222,7 @@ async function deleteResource(URI) {
   `);
 }
 
-async function getSubmissionById(submissionId){
+async function getSubmissionById(submissionId) {
   const q = `
     PREFIX meb: <http://rdf.myexperiment.org/ontologies/base/>
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
@@ -245,14 +260,15 @@ async function getSubmissionById(submissionId){
 
   if (result.results.bindings.length) {
     return {
-      submissionDocumentURI: (result.results.bindings[0]['submissionDocument'] || {}).value,
+      submissionDocumentURI: (
+        result.results.bindings[0]['submissionDocument'] || {}
+      ).value,
       submissionURI: (result.results.bindings[0]['submission'] || {}).value,
       formDataURI: (result.results.bindings[0]['formData'] || {}).value,
       status: (result.results.bindings[0]['status'] || {}).value,
-      taskURI: (result.results.bindings[0]['submissionTask'] || {}).value
+      taskURI: (result.results.bindings[0]['submissionTask'] || {}).value,
     };
-  }
-  else {
+  } else {
     return null;
   }
 }
