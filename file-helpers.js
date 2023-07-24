@@ -3,8 +3,10 @@ import { updateSudo as update } from '@lblod/mu-auth-sudo';
 import fs from 'fs/promises';
 import * as env from 'env-var';
 
-export const FILE_GRAPH =
-  process.env.FILE_GRAPH || 'http://mu.semte.ch/graphs/public';
+export const FILE_GRAPH = env
+  .get('FILE_GRAPH')
+  .default('http://mu.semte.ch/graphs/public')
+  .asString();
 
 /**
  * Deletes a file in the triplestore and on disk

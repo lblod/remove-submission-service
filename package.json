@@ -4,6 +4,7 @@
   "description": "Microservice responsible for removing/cleaning-up submissions",
   "dependencies": {
     "@lblod/mu-auth-sudo": "^0.6.1",
+    "env-var": "^7.3.1"
   },
   "devDependencies": {
     "eslint": "^8.32.0",
