@@ -1,7 +1,6 @@
 import { sparqlEscapeUri } from 'mu';
 import { updateSudo as update } from '@lblod/mu-auth-sudo';
 import fs from 'fs/promises';
-import * as env from 'env-var';
 
 /**
  * Deletes a file in the triplestore and on disk
