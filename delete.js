@@ -233,31 +233,34 @@ async function getSubmissionById(submissionId) {
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     PREFIX prov: <http://www.w3.org/ns/prov#>
     PREFIX melding: <http://lblod.data.gift/vocabularies/automatische-melding/>
-    PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
-    PREFIX nfo: <http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#>
     PREFIX ext: <http://mu.semte.ch/vocabularies/ext/>
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX adms: <http://www.w3.org/ns/adms#>
+    PREFIX task: <http://redpencil.data.gift/vocabularies/tasks/>
+    PREFIX taskO: <http://lblod.data.gift/id/jobs/concept/TaskOperation/>
 
     SELECT DISTINCT ?submission ?formData ?submissionTask ?submissionDocument ?status WHERE {
-       ?submission a meb:Submission;
-          mu:uuid ${sparqlEscapeString(submissionId)};
-          adms:status ?status.
+      ?submission a meb:Submission;
+         mu:uuid ${sparqlEscapeString(submissionId)};
+         adms:status ?status.
 
-       OPTIONAL {
-         ?submission prov:generated ?formData.
-         ?formData a melding:FormData.
-       }
+      OPTIONAL {
+        ?submission prov:generated ?formData.
+        ?formData a melding:FormData.
+      }
 
-       OPTIONAL {
-         ?submissionTask a melding:AutomaticSubmissionTask.
-         ?submissionTask prov:generated ?submission.
-       }
+      OPTIONAL {
+        ?submissionTask
+          a task:Task ;
+          task:operation taskO:register ;
+          dct:isPartOf ?job .
+        ?job prov:generated ?submission.
+      }
 
-       OPTIONAL {
-         ?submission dct:subject ?submissionDocument.
-         ?submissionDocument a ext:SubmissionDocument.
-       }
+      OPTIONAL {
+        ?submission dct:subject ?submissionDocument.
+        ?submissionDocument a ext:SubmissionDocument.
+      }
     } LIMIT 1
   `;
 
