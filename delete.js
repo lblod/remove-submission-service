@@ -60,21 +60,15 @@ export async function deleteSubmission(uuid) {
       status,
     } = submissionInfo;
     if (status !== SENT_STATUS) {
-      // if not a auto-submission, nothing was harvested
       if (taskURI) await deleteHarvestedFiles(submissionURI, submissionGraph);
-
       if (formDataURI) await deleteUploadedFiles(formDataURI, submissionGraph);
-      if (submissionDocumentURI)
+      if (submissionDocumentURI) {
         await deleteLinkedTTLFiles(submissionDocumentURI, submissionGraph);
-
-      // if not a auto-submission, no task was created
-      if (taskURI) await deleteTaskwithJob(taskURI, submissionGraph);
-
-      if (formDataURI) await deleteResource(formDataURI, submissionGraph);
-      if (submissionDocumentURI)
         await deleteResource(submissionDocumentURI, submissionGraph);
-
+      }
+      if (formDataURI) await deleteResource(formDataURI, submissionGraph);
       await deleteResource(submissionURI, submissionGraph);
+      if (taskURI) await deleteTaskwithJob(taskURI, submissionGraph);
       return { message: `successfully deleted submission <${submissionURI}>.` };
     }
     return {
@@ -97,13 +91,15 @@ export async function deleteSubmission(uuid) {
  * Private
  */
 
-async function deleteHarvestedFiles(uri, graph) {
-  const files = await getHarvestedFiles(uri, graph);
+async function deleteHarvestedFiles(submissionUri, graph) {
+  const files = await getHarvestedFiles(submissionUri, graph);
   for (const file of files) {
-    await deleteFile(file.parent, graph);
-    await deleteFile(file.location, graph);
-    await deleteResource(file.location, graph);
-    await deleteResource(file.file, graph);
+    await deleteFile(file.physical, graph);
+    await deleteFile(file.harvestedPhysical, graph);
+    await deleteResource(file.remoteDataObject, graph);
+    await deleteResource(file.physical, graph);
+    await deleteResource(file.harvestedLogical, graph);
+    await deleteResource(file.harvestedPhysical, graph);
   }
 }
 
@@ -132,10 +128,22 @@ async function deleteLinkedTTLFiles(uri, graph) {
   const metaFile = await getTTLResource(uri, META_FILE_TYPE, graph);
   const sourceFile = await getTTLResource(uri, FORM_DATA_FILE_TYPE, graph);
 
-  if (additionsFile) await deleteFile(additionsFile, graph);
-  if (removalsFile) await deleteFile(removalsFile, graph);
-  if (metaFile) await deleteFile(metaFile, graph);
-  if (sourceFile) await deleteFile(sourceFile, graph);
+  if (additionsFile) {
+    await deleteFile(additionsFile.physical, graph);
+    await deleteResource(additionsFile.logical, graph);
+  }
+  if (removalsFile) {
+    await deleteFile(removalsFile.physical, graph);
+    await deleteResource(removalsFile.logical, graph);
+  }
+  if (metaFile) {
+    await deleteFile(metaFile.physical, graph);
+    await deleteResource(metaFile.logical, graph);
+  }
+  if (sourceFile) {
+    await deleteFile(sourceFile.physical, graph);
+    await deleteResource(sourceFile.logical, graph);
+  }
 }
 
 /**
@@ -175,17 +183,28 @@ async function getUploadedFiles(uri, graph) {
  *
  * @param uri of the resource.
  */
-async function getHarvestedFiles(uri, graph) {
+async function getHarvestedFiles(submissionUri, graph) {
   const response = await querySudo(`
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
+    PREFIX nfo: <http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#>
 
-    SELECT DISTINCT ?file ?location ?parent
+    SELECT DISTINCT ?remoteDataObject ?physical ?harvestedLogical ?harvestedPhysical
     WHERE {
       GRAPH ${sparqlEscapeUri(graph)} {
-        ${sparqlEscapeUri(uri)} nie:hasPart ?file .
-        ?location nie:dataSource ?file .
-        ?parent nie:dataSource ?location .
+        ${sparqlEscapeUri(submissionUri)} nie:hasPart ?remoteDataObject .
+        ?remoteDataObject a nfo:RemoteDataObject .
+        ?physical
+          nie:dataSource ?remoteDataObject ;
+          a nfo:FileDataObject .
+        ?harvestedPhysical
+          nie:dataSource ?physical ;
+          a nfo:FileDataObject ;
+          nie:dataSource ?harvestedLogical ;
+          dct:type <http://data.lblod.gift/concepts/harvested-data> .
+        ?harvestedLogical
+          a nfo:FileDataObject ;
+          dct:type <http://data.lblod.gift/concepts/harvested-data> .
       }
     }
   `);
@@ -193,12 +212,15 @@ async function getHarvestedFiles(uri, graph) {
   const parser = new SparqlJsonParser();
   const parsedResults = parser.parseJsonResults(response);
   if (parsedResults.length < 1)
-    console.log(`Could not find any harvested files for resource <${uri}>`);
+    console.log(
+      `Could not find any harvested files for resource <${submissionUri}>`,
+    );
   return parsedResults.map((binding) => {
     return {
-      file: binding?.file?.value,
-      location: binding?.location?.value,
-      parent: binding?.parent?.value,
+      remoteDataObject: binding?.remoteDataObject?.value,
+      physical: binding?.physical?.value,
+      harvestedLogical: binding?.harvestedLogical?.value,
+      harvestedPhysical: binding?.harvestedPhysical?.value,
     };
   });
 }
@@ -215,22 +237,29 @@ async function getTTLResource(submissionDocument, fileType, graph) {
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
 
-    SELECT DISTINCT ?file
+    SELECT DISTINCT ?logical ?physical
     WHERE {
       GRAPH ${sparqlEscapeUri(graph)} {
-        ${sparqlEscapeUri(submissionDocument)} dct:source ?file .
-        ?file dct:type ${sparqlEscapeUri(fileType)} .
+        ${sparqlEscapeUri(submissionDocument)} dct:source ?physical .
+        ?physical
+          dct:type ${sparqlEscapeUri(fileType)} ;
+          nie:dataSource ?logical .
       }
     } LIMIT 1
   `);
 
   const parser = new SparqlJsonParser();
   const parsedResults = parser.parseJsonResults(response);
-  if (parsedResults.length < 1)
+  if (parsedResults.length < 1) {
     console.log(
       `Part of type ${fileType} for submission document ${submissionDocument} not found`,
     );
-  return parsedResults[0]?.file?.value;
+    return;
+  }
+  return {
+    logical: parsedResults[0]?.logical?.value,
+    physical: parsedResults[0]?.physical?.value,
+  };
 }
 
 /**
