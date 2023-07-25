@@ -1,5 +1,5 @@
 import { sparqlEscapeString, sparqlEscapeUri } from 'mu';
-import { querySudo } from '@lblod/mu-auth-sudo';
+import { querySudo, updateSudo } from '@lblod/mu-auth-sudo';
 import { deleteFile } from './file-helpers';
 import { SparqlJsonParser } from 'sparqljson-parse';
 import * as env from 'env-var';
@@ -68,8 +68,7 @@ export async function deleteSubmission(uuid) {
         await deleteLinkedTTLFiles(submissionDocumentURI, submissionGraph);
 
       // if not a auto-submission, no task was created
-      if (taskURI)
-        await deleteResource(taskURI, submissionGraph, submissionGraph);
+      if (taskURI) await deleteTaskwithJob(taskURI, submissionGraph);
 
       if (formDataURI) await deleteResource(formDataURI, submissionGraph);
       if (submissionDocumentURI)
@@ -240,7 +239,7 @@ async function getTTLResource(submissionDocument, fileType, graph) {
  * @param {string} URI of the resource to delete the related files for
  */
 async function deleteResource(uri, graph) {
-  return querySudo(`
+  return updateSudo(`
     DELETE {
       GRAPH ${sparqlEscapeUri(graph)} {
         ${sparqlEscapeUri(uri)} ?p ?o .
@@ -249,6 +248,51 @@ async function deleteResource(uri, graph) {
     WHERE {
       GRAPH ${sparqlEscapeUri(graph)} {
         ${sparqlEscapeUri(uri)} ?p ?o .
+      }
+    }
+  `);
+}
+
+async function deleteTaskwithJob(taskUri, graph) {
+  return updateSudo(`
+    PREFIX dct: <http://purl.org/dc/terms/>
+    PREFIX task: <http://redpencil.data.gift/vocabularies/tasks/>
+
+    DELETE {
+      GRAPH ${sparqlEscapeUri(graph)} {
+        ?hc2 ?hp2 ?ho2 .
+        ?hc ?hp ?ho .
+        ?rc ?rp ?ro .
+        ?ic ?ip ?io .
+        ?task ?tp ?to .
+        ?job ?jp ?jo .
+      }
+    } WHERE {
+      GRAPH ${sparqlEscapeUri(graph)} {
+        ${sparqlEscapeUri(taskUri)} dct:isPartOf ?job .
+        ?job ?jp ?jo .
+        ?task
+          dct:isPartOf ?job ;
+          ?tp ?to .
+
+        OPTIONAL {
+          ?task task:inputContainer ?ic .
+          ?ic ?ip ?io .
+        }
+        OPTIONAL {
+          ?task task:resultsContainer ?rc .
+          ?rc ?rp ?ro .
+        }
+
+        OPTIONAL {
+          ?ic task:hasHarvestingCollection ?hc .
+          ?hc ?hp ?ho .
+        }
+
+        OPTIONAL {
+          ?rc task:hasHarvestingCollection ?hc2 .
+          ?hc2 ?hp2 ?ho2 .
+        }
       }
     }
   `);
