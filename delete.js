@@ -31,6 +31,11 @@ const ADDITIONS_FILE_TYPE =
 const REMOVALS_FILE_TYPE = 'http://data.lblod.gift/concepts/removals-file-type';
 const META_FILE_TYPE = 'http://data.lblod.gift/concepts/meta-file-type';
 
+export async function deleteSubmissionViaUri(uri) {
+  const uuid = await getSubmissionUuid(uri);
+  return deleteSubmission(uuid);
+}
+
 /**
  * Delete a submission resources and properties. Deletes everything it
  * encounters
@@ -38,7 +43,7 @@ const META_FILE_TYPE = 'http://data.lblod.gift/concepts/meta-file-type';
  * @public
  * @async
  * @function
- * @param {String} uuid - submission-document to be deleted
+ * @param {String} uuid - The UUID of the submission-document to be deleted.
  * @returns {Object} Object with optional `message` (string), `uri` (string)
  * and `error` (object). The `error` object has `status` (integer) and
  * `message` (string) properties.
@@ -90,6 +95,18 @@ export async function deleteSubmission(uuid) {
 /*
  * Private
  */
+
+async function getSubmissionUuid(uri) {
+  const response = await querySudo(`
+    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+    SELECT DISTINCT ?uuid WHERE {
+      ${sparqlEscapeUri(uri)} mu:uuid ?uuid .
+    } LIMIT 1
+  `);
+  const parser = new SparqlJsonParser();
+  const parsedResults = parser.parseJsonResults(response);
+  return parsedResults[0]?.uuid?.value;
+}
 
 async function deleteHarvestedFiles(submissionUri, graph) {
   const files = await getHarvestedFiles(submissionUri, graph);
@@ -389,9 +406,9 @@ async function getOrganisationIdFromSubmission(submissionUuid) {
     PREFIX pav:  <http://purl.org/pav/>
 
     SELECT DISTINCT ?organisationId WHERE {
-      ?submission mu:uuid ${sparqlEscapeString(submissionUuid)} .
-      ?job prov:generated ?submission .
-      ?submission pav:createdBy ?bestuurseenheid .
+      ?submission
+        mu:uuid ${sparqlEscapeString(submissionUuid)} ;
+        pav:createdBy ?bestuurseenheid .
       ?bestuurseenheid mu:uuid ?organisationId .
     }
     LIMIT 1
