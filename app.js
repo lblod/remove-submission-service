@@ -17,7 +17,7 @@ app.use(bodyParser.json({ type: 'application/ld+json' }));
 app.use(bodyParser.json());
 app.use(errorHandler);
 
-app.delete('/submissions/:uuid', async function (req, res, next) {
+app.delete('/submissions/:uuid', async function (req, res) {
   const uuid = req.params.uuid;
   console.log(
     `Received request to delete submission-document with uuid '${uuid}'`,
@@ -29,11 +29,11 @@ app.delete('/submissions/:uuid', async function (req, res, next) {
     }
     return res.status(200).send(message);
   } catch (e) {
-    console.log(
-      `Something unexpected went wrong while deleting submission-document with uuid '${uuid}'`,
-    );
+    const message = `Something unexpected went wrong while deleting submission-document with uuid '${uuid}'`;
+    console.log(message);
     console.error(e);
-    return next(e);
+    await err.sendErrorAlert({ message, detail: e.message });
+    res.status(500).send(`${message}\n${e.message}`);
   }
 });
 
@@ -55,8 +55,8 @@ app.post('/delete-melding', async function (req, res) {
 
     const { message, error } = await del.deleteSubmissionViaUri(submissionUri);
     if (error) {
-      res.status(err.status || 500);
-      const errorStore = errorToStore(err);
+      res.status(error.status || 500);
+      const errorStore = errorToStore(error);
       const errorJsonld = await storeToJsonLd(
         errorStore,
         errcon.ErrorResponseContext,
@@ -66,8 +66,7 @@ app.post('/delete-melding', async function (req, res) {
     }
     return res.status(200).send({ message });
   } catch (error) {
-    const message =
-      'Something went wrong while fetching the status of the submitted resource and its associated Job';
+    const message = 'Something went wrong while processing the delete request.';
     console.error(message, error.message);
     console.error(error);
     await err.sendErrorAlert({ message, detail: error.message });
