@@ -45,8 +45,8 @@ export async function deleteSubmissionViaUri(uri) {
  * @function
  * @param {String} uuid - The UUID of the submission-document to be deleted.
  * @returns {Object} Object with optional `message` (string), `uri` (string)
- * and `error` (object). The `error` object has `status` (integer) and
- * `message` (string) properties.
+ * and `error` (object). The `error` is a JavaScrip Error object and has
+ * `status` (integer) and `message` (string) properties.
  */
 export async function deleteSubmission(uuid) {
   const organisationId = await getOrganisationIdFromSubmission(uuid);
@@ -74,21 +74,23 @@ export async function deleteSubmission(uuid) {
       if (formDataURI) await deleteResource(formDataURI, submissionGraph);
       await deleteResource(submissionURI, submissionGraph);
       if (taskURI) await deleteTaskwithJob(taskURI, submissionGraph);
-      return { message: `successfully deleted submission <${submissionURI}>.` };
+      return {
+        message: `Successfully deleted submission <${submissionURI}> and related files and resources.`,
+      };
     }
+    const err = new Error(
+      `Could not delete submission <${submissionURI}>, has already been sent`,
+    );
+    err.status = 409;
     return {
       uri: submissionDocumentURI,
-      error: {
-        status: 409,
-        message: `Could not delete submission <${submissionURI}>, has already been sent`,
-      },
+      error: err,
     };
   }
+  const err = new Error(`Could not find a submission for uuid '${uuid}'`);
+  err.status = 404;
   return {
-    error: {
-      status: 404,
-      message: `Could not find a submission for uuid '${uuid}'`,
-    },
+    error: err,
   };
 }
 

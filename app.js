@@ -1,15 +1,21 @@
-import { app, errorHandler } from 'mu';
+import { app, errorHandler, uuid } from 'mu';
+import bodyParser from 'body-parser';
 import * as del from './delete';
 import * as auth from './authentication';
 import * as jsonld from 'jsonld';
 import * as jli from './jsonld-input';
 import * as err from './error';
+import * as errcon from './ErrorContexts';
 import * as N3 from 'n3';
-const { namedNode } = N3.DataFactory;
+const { namedNode, literal, blankNode } = N3.DataFactory;
 
 app.get('/', function (req, res) {
   res.send('Hello clean-up-submission-service');
 });
+
+app.use(bodyParser.json({ type: 'application/ld+json' }));
+app.use(bodyParser.json());
+app.use(errorHandler);
 
 app.delete('/submissions/:uuid', async function (req, res, next) {
   const uuid = req.params.uuid;
@@ -19,7 +25,7 @@ app.delete('/submissions/:uuid', async function (req, res, next) {
   try {
     const { message, error } = await del.deleteSubmission(uuid);
     if (error) {
-      return res.status(error.status).send(error);
+      return res.status(error.status).send({ error: error.message });
     }
     return res.status(200).send(message);
   } catch (e) {
@@ -48,12 +54,17 @@ app.post('/delete-melding', async function (req, res) {
       throw new Error('There was no submission URI in the request');
 
     const { message, error } = await del.deleteSubmissionViaUri(submissionUri);
-    //TOT HIER
-    //TODO error return in JSONLD
     if (error) {
-      return res.status(error.status).send(error);
+      res.status(err.status || 500);
+      const errorStore = errorToStore(err);
+      const errorJsonld = await storeToJsonLd(
+        errorStore,
+        errcon.ErrorResponseContext,
+        errcon.ErrorResponseFrame,
+      );
+      return res.json(errorJsonld);
     }
-    return res.status(200).send(message);
+    return res.status(200).send({ message });
   } catch (error) {
     const message =
       'Something went wrong while fetching the status of the submitted resource and its associated Job';
@@ -109,6 +120,38 @@ async function jsonLdToStore(jsonLdObject) {
   return store;
 }
 
+async function storeToJsonLd(store, context, frame) {
+  const jsonld1 = await jsonld.default.fromRDF([...store], {});
+  const framed = await jsonld.default.frame(jsonld1, frame);
+  const compacted = await jsonld.default.compact(framed, context);
+  return compacted;
+}
 
-
-app.use(errorHandler);
+/*
+ * Produces an RDF store with the data to encode an error in the OSLC namespace.
+ *
+ * @function
+ * @param {Error} errorObject - Instance of the standard JavaScript Error class
+ * or similar object that has a `message` property.
+ * @returns {N3.Store} A new Store with the properties to represent the error.
+ */
+function errorToStore(errorObject) {
+  const store = new N3.Store();
+  const error = blankNode(uuid());
+  store.addQuad(
+    error,
+    'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+    'http://open-services.net/ns/core#Error',
+  );
+  store.addQuad(
+    error,
+    'http://mu.semte.ch/vocabularies/core/uuid',
+    literal(uuid()),
+  );
+  store.addQuad(
+    error,
+    'http://open-services.net/ns/core#message',
+    literal(errorObject.message),
+  );
+  return store;
+}
