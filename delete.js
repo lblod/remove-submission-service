@@ -1,60 +1,81 @@
-import {sparqlEscapeString, sparqlEscapeUri} from 'mu';
-import {querySudo} from '@lblod/mu-auth-sudo';
-import {deleteFile, FILE_GRAPH} from "./file-helpers";
+import { sparqlEscapeString, sparqlEscapeUri } from 'mu';
+import { querySudo } from '@lblod/mu-auth-sudo';
+import { deleteFile, FILE_GRAPH } from './file-helpers';
+import { SparqlJsonParser } from 'sparqljson-parse';
 
-const SENT_STATUS = 'http://lblod.data.gift/concepts/9bd8d86d-bb10-4456-a84e-91e9507c374c';
+const SENT_STATUS =
+  'http://lblod.data.gift/concepts/9bd8d86d-bb10-4456-a84e-91e9507c374c';
 
-const FORM_DATA_FILE_TYPE = 'http://data.lblod.gift/concepts/form-data-file-type';
-const ADDITIONS_FILE_TYPE = 'http://data.lblod.gift/concepts/additions-file-type';
+const FORM_DATA_FILE_TYPE =
+  'http://data.lblod.gift/concepts/form-data-file-type';
+const ADDITIONS_FILE_TYPE =
+  'http://data.lblod.gift/concepts/additions-file-type';
 const REMOVALS_FILE_TYPE = 'http://data.lblod.gift/concepts/removals-file-type';
 const META_FILE_TYPE = 'http://data.lblod.gift/concepts/meta-file-type';
 
 /**
- * Delete a submission resources and properties. Deletes everything it encounters
+ * Delete a submission resources and properties. Deletes everything it
+ * encounters
  *
- * @param uuid - submission-document to be deleted
+ * @public
+ * @async
+ * @function
+ * @param {String} uuid - submission-document to be deleted
+ * @returns {Object} Object with optional `message` (string), `uri` (string)
+ * and `error` (object). The `error` object has `status` (integer) and
+ * `message` (string) properties.
  */
 export async function deleteSubmission(uuid) {
-  const result = await getSubmissionById(uuid);
+  const submissionInfo = await getSubmissionById(uuid);
 
-  if (result) {
-
-    const {submissionDocumentURI, submissionURI, formDataURI, taskURI, status} = result;
+  if (submissionInfo) {
+    const {
+      submissionDocumentURI,
+      submissionURI,
+      formDataURI,
+      taskURI,
+      status,
+    } = submissionInfo;
     if (status !== SENT_STATUS) {
-
       // if not a auto-submission, nothing was harvested
-      if(taskURI) await deleteHarvestedFiles(submissionURI);
+      if (taskURI) await deleteHarvestedFiles(submissionURI);
 
-      if(formDataURI) await deleteUploadedFiles(formDataURI);
-      if(submissionDocumentURI) await deleteLinkedTTLFiles(submissionDocumentURI);
+      if (formDataURI) await deleteUploadedFiles(formDataURI);
+      if (submissionDocumentURI)
+        await deleteLinkedTTLFiles(submissionDocumentURI);
 
       // if not a auto-submission, no task was created
       if (taskURI) await deleteResource(taskURI);
 
-      if(formDataURI) await deleteResource(formDataURI);
-      if(submissionDocumentURI) await deleteResource(submissionDocumentURI);
+      if (formDataURI) await deleteResource(formDataURI);
+      if (submissionDocumentURI) await deleteResource(submissionDocumentURI);
 
       await deleteResource(submissionURI);
-      return {message: `successfully deleted submission <${submissionURI}>.`};
+      return { message: `successfully deleted submission <${submissionURI}>.` };
     }
     return {
       uri: submissionDocumentURI,
       error: {
         status: 409,
-        message: `Could not delete submission <${submissionURI}>, has already been sent`
-      }
+        message: `Could not delete submission <${submissionURI}>, has already been sent`,
+      },
     };
   }
-  return {error: {status: 404, message: `Could not find a submission for uuid '${uuid}'`}};
+  return {
+    error: {
+      status: 404,
+      message: `Could not find a submission for uuid '${uuid}'`,
+    },
+  };
 }
 
 /*
  * Private
  */
 
-async function deleteHarvestedFiles(uri){
+async function deleteHarvestedFiles(uri) {
   const files = await getHarvestedFiles(uri);
-  for (let file of files) {
+  for (const file of files) {
     await deleteFile(file.parent);
     await deleteFile(file.location);
     await deleteResource(file.location);
@@ -69,7 +90,7 @@ async function deleteHarvestedFiles(uri){
  */
 async function deleteUploadedFiles(uri) {
   const files = await getUploadedFiles(uri);
-  for (let file of files) {
+  for (const file of files) {
     await deleteFile(file.location);
     await deleteResource(file.file);
     await deleteResource(file.location);
@@ -99,7 +120,7 @@ async function deleteLinkedTTLFiles(uri) {
  * @param uri of the resource.
  */
 async function getUploadedFiles(uri) {
-  const result = await querySudo(`
+  const response = await querySudo(`
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
 
@@ -109,19 +130,18 @@ async function getUploadedFiles(uri) {
         ?location nie:dataSource ?file .
         OPTIONAL {?parent nie:dataSource ?location .}
     }
-  `)
+  `);
 
-  if (result.results.bindings.length) {
-    return result.results.bindings.map(binding => {
-      return {
-        file: binding['file'].value,
-        location: binding['location'].value
-      }
-    });
-  } else {
+  const parser = new SparqlJsonParser();
+  const parsedResults = parser.parseJsonResults(response);
+  if (parsedResults.length < 1)
     console.log(`Could not find any uploaded files for resource <${uri}>`);
-    return [];
-  }
+  return parsedResults.map((binding) => {
+    return {
+      file: binding?.file?.value,
+      location: binding?.location?.value,
+    };
+  });
 }
 
 /**
@@ -130,30 +150,29 @@ async function getUploadedFiles(uri) {
  * @param uri of the resource.
  */
 async function getHarvestedFiles(uri) {
-  const result = await querySudo(`
+  const response = await querySudo(`
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
 
     SELECT DISTINCT ?file ?location ?parent
     WHERE {
-        ${sparqlEscapeUri(uri)} nie:hasPart ?file .
-        ?location nie:dataSource ?file .
-        ?parent nie:dataSource ?location .
+      ${sparqlEscapeUri(uri)} nie:hasPart ?file .
+      ?location nie:dataSource ?file .
+      ?parent nie:dataSource ?location .
     }
-  `)
+  `);
 
-  if (result.results.bindings.length) {
-    return result.results.bindings.map(binding => {
-      return {
-        file: binding['file'].value,
-        location: binding['location'].value,
-        parent: binding['parent'].value
-      }
-    });
-  } else {
+  const parser = new SparqlJsonParser();
+  const parsedResults = parser.parseJsonResults(response);
+  if (parsedResults.length < 1)
     console.log(`Could not find any harvested files for resource <${uri}>`);
-    return [];
-  }
+  return parsedResults.map((binding) => {
+    return {
+      file: binding?.file?.value,
+      location: binding?.location?.value,
+      parent: binding?.parent?.value,
+    };
+  });
 }
 
 /**
@@ -163,7 +182,7 @@ async function getHarvestedFiles(uri) {
  * @param {string} fileType URI of the type of the related file
  */
 async function getTTLResource(submissionDocument, fileType) {
-  const result = await querySudo(`
+  const response = await querySudo(`
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
@@ -176,15 +195,16 @@ async function getTTLResource(submissionDocument, fileType) {
       GRAPH ${sparqlEscapeUri(FILE_GRAPH)} {
         ?file dct:type ${sparqlEscapeUri(fileType)} .
       }
-    }
+    } LIMIT 1
   `);
 
-  if (result.results.bindings.length) {
-    return result.results.bindings[0]['file'].value;
-  } else {
-    console.log(`Part of type ${fileType} for submission document ${submissionDocument} not found`);
-    return null;
-  }
+  const parser = new SparqlJsonParser();
+  const parsedResults = parser.parseJsonResults(response);
+  if (parsedResults.length < 1)
+    console.log(
+      `Part of type ${fileType} for submission document ${submissionDocument} not found`,
+    );
+  return parsedResults[0]?.file?.value;
 }
 
 /**
@@ -193,7 +213,7 @@ async function getTTLResource(submissionDocument, fileType) {
  * @param {string} URI of the resource to delete the related files for
  */
 async function deleteResource(URI) {
-  const result = await querySudo(`
+  return querySudo(`
     DELETE {
       GRAPH ?g {
         ${sparqlEscapeUri(URI)} ?p ?o .
@@ -207,8 +227,8 @@ async function deleteResource(URI) {
   `);
 }
 
-async function getSubmissionById(submissionId){
-  const q = `
+async function getSubmissionById(submissionId) {
+  const infoQuery = `
     PREFIX meb: <http://rdf.myexperiment.org/ontologies/base/>
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     PREFIX prov: <http://www.w3.org/ns/prov#>
@@ -238,21 +258,20 @@ async function getSubmissionById(submissionId){
          ?submission dct:subject ?submissionDocument.
          ?submissionDocument a ext:SubmissionDocument.
        }
-    }
+    } LIMIT 1
   `;
 
-  const result = await querySudo(q);
-
-  if (result.results.bindings.length) {
+  const response = await querySudo(infoQuery);
+  const parser = new SparqlJsonParser();
+  const parsedResults = parser.parseJsonResults(response);
+  if (parsedResults.length > 0) {
+    const firstResult = parsedResults[0];
     return {
-      submissionDocumentURI: (result.results.bindings[0]['submissionDocument'] || {}).value,
-      submissionURI: (result.results.bindings[0]['submission'] || {}).value,
-      formDataURI: (result.results.bindings[0]['formData'] || {}).value,
-      status: (result.results.bindings[0]['status'] || {}).value,
-      taskURI: (result.results.bindings[0]['submissionTask'] || {}).value
+      submissionDocumentURI: firstResult?.submissionDocument?.value,
+      submissionURI: firstResult?.submission?.value,
+      formDataURI: firstResult?.formData?.value,
+      status: firstResult?.status?.value,
+      taskURI: firstResult?.submissionTask?.value,
     };
-  }
-  else {
-    return null;
   }
 }

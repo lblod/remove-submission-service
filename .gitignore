@@ -1,4 +1,18 @@
-package-lock.json
+# -*- mode: gitignore; -*-
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+node_modules/
+.log/
 
-/.idea
-/node_modules
+# Linting
+/.eslintcache
+
+# JSDoc documents
+out/
+doc*.md

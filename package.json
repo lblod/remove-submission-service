@@ -3,12 +3,20 @@
   "version": "0.3.3",
   "description": "Microservice responsible for removing/cleaning-up submissions",
   "dependencies": {
-    "@lblod/mu-auth-sudo": "^0.2.0",
-    "fs-extra": "8.1.0"
+    "@lblod/mu-auth-sudo": "^0.6.1",
+    "env-var": "^7.3.1",
+    "sparqljson-parse": "^2.2.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "eslint": "^8.32.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "prettier": "^3.0.0"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --cache --fix"
   },
   "repository": {
     "type": "git",
