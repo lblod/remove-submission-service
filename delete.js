@@ -308,6 +308,9 @@ async function deleteTaskwithJob(taskUri, graph) {
 
     DELETE {
       GRAPH ${sparqlEscapeUri(graph)} {
+        ?rc ?rp ?ro .
+        ?ic ?ip ?io .
+        ?hc2 ?hp2 ?ho2 .
         ?hc ?hp ?ho .
         ?dc ?dp ?do .
         ?task ?tp ?to .
