@@ -296,26 +296,31 @@ async function deleteTaskwithJob(taskUri, graph) {
       }
     } WHERE {
       GRAPH ${sparqlEscapeUri(graph)} {
-        {
-          ${sparqlEscapeUri(taskUri)} dct:isPartOf ?job .
-          ?job ?jp ?jo .
-          ?task
-            dct:isPartOf ?job ;
-            ?tp ?to .
-        } UNION {
-          VALUES ?p {
-            task:inputContainer
-            task:resultsContainer
-          }
-          ?task ?p ?dc .
-          ?dc ?dp ?do .
-        } UNION {
-          VALUES ?p {
-            task:hasHarvestingCollection
-            task:hasHarvestingCollection
-          }
-          ?dc ?p ?hc .
+        ${sparqlEscapeUri(taskUri)} dct:isPartOf ?job .
+        ?job ?jp ?jo .
+        ?task
+          dct:isPartOf ?job ;
+          ?tp ?to .
+
+        OPTIONAL {
+          ?task task:inputContainer ?ic .
+          ?ic ?ip ?io .
+          ?ic task:hasHarvestingCollection ?hc .
           ?hc ?hp ?ho .
+        }
+        OPTIONAL {
+          ?task task:resultsContainer ?rc .
+          ?rc ?rp ?ro .
+          ?rc task:hasHarvestingCollection ?hc2 .
+          ?hc2 ?hp2 ?ho2 .
+        }
+        OPTIONAL {
+          ?task task:inputContainer ?ic .
+          ?ic ?ip ?io .
+        }
+        OPTIONAL {
+          ?task task:resultsContainer ?rc .
+          ?rc ?rp ?ro .
         }
       }
     }
