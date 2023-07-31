@@ -31,6 +31,11 @@ const ADDITIONS_FILE_TYPE =
 const REMOVALS_FILE_TYPE = 'http://data.lblod.gift/concepts/removals-file-type';
 const META_FILE_TYPE = 'http://data.lblod.gift/concepts/meta-file-type';
 
+export async function deleteSubmissionViaUri(uri) {
+  const uuid = await getSubmissionUuid(uri);
+  return deleteSubmission(uuid);
+}
+
 /**
  * Delete a submission resources and properties. Deletes everything it
  * encounters
@@ -38,10 +43,10 @@ const META_FILE_TYPE = 'http://data.lblod.gift/concepts/meta-file-type';
  * @public
  * @async
  * @function
- * @param {String} uuid - submission-document to be deleted
+ * @param {String} uuid - The UUID of the submission-document to be deleted.
  * @returns {Object} Object with optional `message` (string), `uri` (string)
- * and `error` (object). The `error` object has `status` (integer) and
- * `message` (string) properties.
+ * and `error` (object). The `error` is a JavaScrip Error object and has
+ * `status` (integer) and `message` (string) properties.
  */
 export async function deleteSubmission(uuid) {
   const organisationId = await getOrganisationIdFromSubmission(uuid);
@@ -69,27 +74,41 @@ export async function deleteSubmission(uuid) {
       if (formDataURI) await deleteResource(formDataURI, submissionGraph);
       await deleteResource(submissionURI, submissionGraph);
       if (taskURI) await deleteTaskwithJob(taskURI, submissionGraph);
-      return { message: `successfully deleted submission <${submissionURI}>.` };
+      return {
+        message: `Successfully deleted submission <${submissionURI}> and related files and resources.`,
+      };
     }
+    const err = new Error(
+      `Could not delete submission <${submissionURI}>, has already been sent`,
+    );
+    err.status = 409;
     return {
       uri: submissionDocumentURI,
-      error: {
-        status: 409,
-        message: `Could not delete submission <${submissionURI}>, has already been sent`,
-      },
+      error: err,
     };
   }
+  const err = new Error(`Could not find a submission for uuid '${uuid}'`);
+  err.status = 404;
   return {
-    error: {
-      status: 404,
-      message: `Could not find a submission for uuid '${uuid}'`,
-    },
+    error: err,
   };
 }
 
 /*
  * Private
  */
+
+async function getSubmissionUuid(uri) {
+  const response = await querySudo(`
+    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+    SELECT DISTINCT ?uuid WHERE {
+      ${sparqlEscapeUri(uri)} mu:uuid ?uuid .
+    } LIMIT 1
+  `);
+  const parser = new SparqlJsonParser();
+  const parsedResults = parser.parseJsonResults(response);
+  return parsedResults[0]?.uuid?.value;
+}
 
 async function deleteHarvestedFiles(submissionUri, graph) {
   const files = await getHarvestedFiles(submissionUri, graph);
@@ -389,9 +408,9 @@ async function getOrganisationIdFromSubmission(submissionUuid) {
     PREFIX pav:  <http://purl.org/pav/>
 
     SELECT DISTINCT ?organisationId WHERE {
-      ?submission mu:uuid ${sparqlEscapeString(submissionUuid)} .
-      ?job prov:generated ?submission .
-      ?submission pav:createdBy ?bestuurseenheid .
+      ?submission
+        mu:uuid ${sparqlEscapeString(submissionUuid)} ;
+        pav:createdBy ?bestuurseenheid .
       ?bestuurseenheid mu:uuid ?organisationId .
     }
     LIMIT 1
