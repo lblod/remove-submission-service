@@ -31,9 +31,9 @@ const ADDITIONS_FILE_TYPE =
 const REMOVALS_FILE_TYPE = 'http://data.lblod.gift/concepts/removals-file-type';
 const META_FILE_TYPE = 'http://data.lblod.gift/concepts/meta-file-type';
 
-export async function deleteSubmissionViaUri(uri) {
-  const uuid = await getSubmissionUuid(uri);
-  return deleteSubmission(uuid);
+export async function deleteSubmissionViaUri(uri, reqState) {
+  const uuid = await getSubmissionUuid(uri, reqState?.canUseSudo);
+  return deleteSubmission(uuid, reqState);
 }
 
 /**
@@ -48,13 +48,21 @@ export async function deleteSubmissionViaUri(uri) {
  * and `error` (object). The `error` is a JavaScrip Error object and has
  * `status` (integer) and `message` (string) properties.
  */
-export async function deleteSubmission(uuid) {
-  const organisationId = await getOrganisationIdFromSubmission(uuid);
+export async function deleteSubmission(uuid, reqState) {
+  const canUseSudo = reqState?.canUseSudo;
+  const organisationId = await getOrganisationIdFromSubmission(
+    uuid,
+    canUseSudo,
+  );
   const submissionGraph = GRAPH_TEMPLATE.replace(
     '~ORGANIZATION_ID~',
     organisationId,
   );
-  const submissionInfo = await getSubmissionById(uuid, submissionGraph);
+  const submissionInfo = await getSubmissionById(
+    uuid,
+    submissionGraph,
+    reqState?.canUseSudo,
+  );
 
   if (submissionInfo) {
     const {
@@ -65,15 +73,27 @@ export async function deleteSubmission(uuid) {
       status,
     } = submissionInfo;
     if (status !== SENT_STATUS) {
-      if (taskURI) await deleteHarvestedFiles(submissionURI, submissionGraph);
-      if (formDataURI) await deleteUploadedFiles(formDataURI, submissionGraph);
+      if (taskURI)
+        await deleteHarvestedFiles(submissionURI, submissionGraph, canUseSudo);
+      if (formDataURI)
+        await deleteUploadedFiles(formDataURI, submissionGraph, canUseSudo);
       if (submissionDocumentURI) {
-        await deleteLinkedTTLFiles(submissionDocumentURI, submissionGraph);
-        await deleteResource(submissionDocumentURI, submissionGraph);
+        await deleteLinkedTTLFiles(
+          submissionDocumentURI,
+          submissionGraph,
+          canUseSudo,
+        );
+        await deleteResource(
+          submissionDocumentURI,
+          submissionGraph,
+          canUseSudo,
+        );
       }
-      if (formDataURI) await deleteResource(formDataURI, submissionGraph);
-      await deleteResource(submissionURI, submissionGraph);
-      if (taskURI) await deleteTaskwithJob(taskURI, submissionGraph);
+      if (formDataURI)
+        await deleteResource(formDataURI, submissionGraph, canUseSudo);
+      await deleteResource(submissionURI, submissionGraph, canUseSudo);
+      if (taskURI)
+        await deleteTaskwithJob(taskURI, submissionGraph, canUseSudo);
       return {
         message: `Successfully deleted submission <${submissionURI}> and related files and resources.`,
       };
@@ -98,8 +118,8 @@ export async function deleteSubmission(uuid) {
  * Private
  */
 
-async function getSubmissionUuid(uri) {
-  const response = await query(`
+async function getSubmissionUuid(uri, canUseSudo) {
+  const response = await (canUseSudo ? querySudo : query)(`
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     SELECT DISTINCT ?uuid WHERE {
       ${sparqlEscapeUri(uri)} mu:uuid ?uuid .
@@ -110,15 +130,15 @@ async function getSubmissionUuid(uri) {
   return parsedResults[0]?.uuid?.value;
 }
 
-async function deleteHarvestedFiles(submissionUri, graph) {
-  const files = await getHarvestedFiles(submissionUri, graph);
+async function deleteHarvestedFiles(submissionUri, graph, canUseSudo) {
+  const files = await getHarvestedFiles(submissionUri, graph, canUseSudo);
   for (const file of files) {
-    await deleteFile(file.physical, graph);
-    await deleteFile(file.harvestedPhysical, graph);
-    await deleteResource(file.remoteDataObject, graph);
-    await deleteResource(file.physical, graph);
-    await deleteResource(file.harvestedLogical, graph);
-    await deleteResource(file.harvestedPhysical, graph);
+    await deleteFile(file.physical, graph, canUseSudo);
+    await deleteFile(file.harvestedPhysical, graph, canUseSudo);
+    await deleteResource(file.remoteDataObject, graph, canUseSudo);
+    await deleteResource(file.physical, graph, canUseSudo);
+    await deleteResource(file.harvestedLogical, graph, canUseSudo);
+    await deleteResource(file.harvestedPhysical, graph, canUseSudo);
   }
 }
 
@@ -127,12 +147,12 @@ async function deleteHarvestedFiles(submissionUri, graph) {
  *
  * @param uri of the resource to delete the linked files for
  */
-async function deleteUploadedFiles(uri, graph) {
-  const files = await getUploadedFiles(uri, graph);
+async function deleteUploadedFiles(uri, graph, canUseSudo) {
+  const files = await getUploadedFiles(uri, graph, canUseSudo);
   for (const file of files) {
-    await deleteFile(file.location, graph);
-    await deleteResource(file.file, graph);
-    await deleteResource(file.location, graph);
+    await deleteFile(file.location, graph, canUseSudo);
+    await deleteResource(file.file, graph, canUseSudo);
+    await deleteResource(file.location, graph, canUseSudo);
   }
 }
 
@@ -141,27 +161,42 @@ async function deleteUploadedFiles(uri, graph) {
  *
  * @param uri resource (submission-document) to delete the linked ttl files for
  */
-async function deleteLinkedTTLFiles(uri, graph) {
-  const additionsFile = await getTTLResource(uri, ADDITIONS_FILE_TYPE, graph);
-  const removalsFile = await getTTLResource(uri, REMOVALS_FILE_TYPE, graph);
-  const metaFile = await getTTLResource(uri, META_FILE_TYPE, graph);
-  const sourceFile = await getTTLResource(uri, FORM_DATA_FILE_TYPE, graph);
+async function deleteLinkedTTLFiles(uri, graph, canUseSudo) {
+  const additionsFile = await getTTLResource(
+    uri,
+    ADDITIONS_FILE_TYPE,
+    graph,
+    canUseSudo,
+  );
+  const removalsFile = await getTTLResource(
+    uri,
+    REMOVALS_FILE_TYPE,
+    graph,
+    canUseSudo,
+  );
+  const metaFile = await getTTLResource(uri, META_FILE_TYPE, graph, canUseSudo);
+  const sourceFile = await getTTLResource(
+    uri,
+    FORM_DATA_FILE_TYPE,
+    graph,
+    canUseSudo,
+  );
 
   if (additionsFile) {
-    await deleteFile(additionsFile.physical, graph);
-    await deleteResource(additionsFile.logical, graph);
+    await deleteFile(additionsFile.physical, graph, canUseSudo);
+    await deleteResource(additionsFile.logical, graph, canUseSudo);
   }
   if (removalsFile) {
-    await deleteFile(removalsFile.physical, graph);
-    await deleteResource(removalsFile.logical, graph);
+    await deleteFile(removalsFile.physical, graph, canUseSudo);
+    await deleteResource(removalsFile.logical, graph, canUseSudo);
   }
   if (metaFile) {
-    await deleteFile(metaFile.physical, graph);
-    await deleteResource(metaFile.logical, graph);
+    await deleteFile(metaFile.physical, graph, canUseSudo);
+    await deleteResource(metaFile.logical, graph, canUseSudo);
   }
   if (sourceFile) {
-    await deleteFile(sourceFile.physical, graph);
-    await deleteResource(sourceFile.logical, graph);
+    await deleteFile(sourceFile.physical, graph, canUseSudo);
+    await deleteResource(sourceFile.logical, graph, canUseSudo);
   }
 }
 
@@ -170,8 +205,8 @@ async function deleteLinkedTTLFiles(uri, graph) {
  *
  * @param uri of the resource.
  */
-async function getUploadedFiles(uri, graph) {
-  const response = await query(`
+async function getUploadedFiles(uri, graph, canUseSudo) {
+  const response = await (canUseSudo ? querySudo : query)(`
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
 
@@ -202,8 +237,8 @@ async function getUploadedFiles(uri, graph) {
  *
  * @param uri of the resource.
  */
-async function getHarvestedFiles(submissionUri, graph) {
-  const response = await query(`
+async function getHarvestedFiles(submissionUri, graph, canUseSudo) {
+  const response = await (canUseSudo ? querySudo : query)(`
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
     PREFIX nfo: <http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#>
@@ -250,8 +285,8 @@ async function getHarvestedFiles(submissionUri, graph) {
  * @param {string} submissionDocument URI of the submitted document to get the related file for
  * @param {string} fileType URI of the type of the related file
  */
-async function getTTLResource(submissionDocument, fileType, graph) {
-  const response = await query(`
+async function getTTLResource(submissionDocument, fileType, graph, canUseSudo) {
+  const response = await (canUseSudo ? querySudo : query)(`
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
@@ -286,8 +321,8 @@ async function getTTLResource(submissionDocument, fileType, graph) {
  *
  * @param {string} URI of the resource to delete the related files for
  */
-async function deleteResource(uri, graph) {
-  return update(`
+async function deleteResource(uri, graph, canUseSudo) {
+  return (canUseSudo ? updateSudo : update)(`
     DELETE {
       GRAPH ${sparqlEscapeUri(graph)} {
         ${sparqlEscapeUri(uri)} ?p ?o .
@@ -301,8 +336,8 @@ async function deleteResource(uri, graph) {
   `);
 }
 
-async function deleteTaskwithJob(taskUri, graph) {
-  return update(`
+async function deleteTaskwithJob(taskUri, graph, canUseSudo) {
+  return (canUseSudo ? updateSudo : update)(`
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX task: <http://redpencil.data.gift/vocabularies/tasks/>
 
@@ -349,7 +384,7 @@ async function deleteTaskwithJob(taskUri, graph) {
   `);
 }
 
-async function getSubmissionById(submissionId, graph) {
+async function getSubmissionById(submissionId, graph, canUseSudo) {
   const infoQuery = `
     PREFIX meb: <http://rdf.myexperiment.org/ontologies/base/>
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
@@ -389,7 +424,7 @@ async function getSubmissionById(submissionId, graph) {
     } LIMIT 1
   `;
 
-  const response = await query(infoQuery);
+  const response = await (canUseSudo ? querySudo : query)(infoQuery);
   const parser = new SparqlJsonParser();
   const parsedResults = parser.parseJsonResults(response);
   if (parsedResults.length > 0) {
@@ -404,8 +439,8 @@ async function getSubmissionById(submissionId, graph) {
   }
 }
 
-async function getOrganisationIdFromSubmission(submissionUuid) {
-  const response = await query(`
+async function getOrganisationIdFromSubmission(submissionUuid, canUseSudo) {
+  const response = await (canUseSudo ? querySudo : query)(`
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     PREFIX prov: <http://www.w3.org/ns/prov#>
     PREFIX pav:  <http://purl.org/pav/>

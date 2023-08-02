@@ -5,7 +5,7 @@ import fs from 'fs/promises';
 /**
  * Deletes a file in the triplestore and on disk
  */
-export async function deleteFile(uri, graph) {
+export async function deleteFile(uri, graph, canUseSudo) {
   const path = uri.replace('share://', '/share/');
 
   try {
@@ -16,7 +16,7 @@ export async function deleteFile(uri, graph) {
   }
 
   try {
-    await update(`
+    await (canUseSudo ? updateSudo : update)(`
       PREFIX nfo: <http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#>
       PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
       PREFIX mu: <http://mu.semte.ch/vocabularies/core/>

@@ -23,7 +23,8 @@ app.delete('/submissions/:uuid', async function (req, res) {
     `Received request to delete submission-document with uuid '${uuid}'`,
   );
   try {
-    const { message, error } = await del.deleteSubmission(uuid);
+    const reqState = { canUseSudo: false };
+    const { message, error } = await del.deleteSubmission(uuid, reqState);
     if (error) {
       return res.status(error.status).send({ error: error.message });
     }
@@ -53,7 +54,11 @@ app.post('/delete-melding', async function (req, res) {
     if (!submissionUri)
       throw new Error('There was no submission URI in the request');
 
-    const { message, error } = await del.deleteSubmissionViaUri(submissionUri);
+    const reqState = { canUseSudo: true };
+    const { message, error } = await del.deleteSubmissionViaUri(
+      submissionUri,
+      reqState,
+    );
     if (error) {
       res.status(error.status || 500);
       const errorStore = errorToStore(error);
