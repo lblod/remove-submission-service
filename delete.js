@@ -1,4 +1,4 @@
-import { sparqlEscapeString, sparqlEscapeUri } from 'mu';
+import { sparqlEscapeString, sparqlEscapeUri, query, update } from 'mu';
 import { querySudo, updateSudo } from '@lblod/mu-auth-sudo';
 import { deleteFile } from './file-helpers';
 import { SparqlJsonParser } from 'sparqljson-parse';
@@ -99,7 +99,7 @@ export async function deleteSubmission(uuid) {
  */
 
 async function getSubmissionUuid(uri) {
-  const response = await querySudo(`
+  const response = await query(`
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     SELECT DISTINCT ?uuid WHERE {
       ${sparqlEscapeUri(uri)} mu:uuid ?uuid .
@@ -171,7 +171,7 @@ async function deleteLinkedTTLFiles(uri, graph) {
  * @param uri of the resource.
  */
 async function getUploadedFiles(uri, graph) {
-  const response = await querySudo(`
+  const response = await query(`
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
 
@@ -203,7 +203,7 @@ async function getUploadedFiles(uri, graph) {
  * @param uri of the resource.
  */
 async function getHarvestedFiles(submissionUri, graph) {
-  const response = await querySudo(`
+  const response = await query(`
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
     PREFIX nfo: <http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#>
@@ -251,7 +251,7 @@ async function getHarvestedFiles(submissionUri, graph) {
  * @param {string} fileType URI of the type of the related file
  */
 async function getTTLResource(submissionDocument, fileType, graph) {
-  const response = await querySudo(`
+  const response = await query(`
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
@@ -287,7 +287,7 @@ async function getTTLResource(submissionDocument, fileType, graph) {
  * @param {string} URI of the resource to delete the related files for
  */
 async function deleteResource(uri, graph) {
-  return updateSudo(`
+  return update(`
     DELETE {
       GRAPH ${sparqlEscapeUri(graph)} {
         ${sparqlEscapeUri(uri)} ?p ?o .
@@ -302,7 +302,7 @@ async function deleteResource(uri, graph) {
 }
 
 async function deleteTaskwithJob(taskUri, graph) {
-  return updateSudo(`
+  return update(`
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX task: <http://redpencil.data.gift/vocabularies/tasks/>
 
@@ -389,7 +389,7 @@ async function getSubmissionById(submissionId, graph) {
     } LIMIT 1
   `;
 
-  const response = await querySudo(infoQuery);
+  const response = await query(infoQuery);
   const parser = new SparqlJsonParser();
   const parsedResults = parser.parseJsonResults(response);
   if (parsedResults.length > 0) {
@@ -405,7 +405,7 @@ async function getSubmissionById(submissionId, graph) {
 }
 
 async function getOrganisationIdFromSubmission(submissionUuid) {
-  const response = await querySudo(`
+  const response = await query(`
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
     PREFIX prov: <http://www.w3.org/ns/prov#>
     PREFIX pav:  <http://purl.org/pav/>

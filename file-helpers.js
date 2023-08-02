@@ -1,5 +1,5 @@
-import { sparqlEscapeUri } from 'mu';
-import { updateSudo as update } from '@lblod/mu-auth-sudo';
+import { sparqlEscapeUri, update } from 'mu';
+import { updateSudo } from '@lblod/mu-auth-sudo';
 import fs from 'fs/promises';
 
 /**
