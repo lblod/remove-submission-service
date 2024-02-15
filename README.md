@@ -10,7 +10,7 @@ docker-compose.yml:
 ```
 services:
   remove-submission:
-    image: lblod/remoce-submission-service:x.x.x
+    image: lblod/clean-up-submission-service:x.x.x
   volumes:
     - ./data/files:/share
 ```
